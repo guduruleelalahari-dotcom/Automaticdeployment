@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Food Delivery - Single File Demo</title>
+  <style>
+    :root{--accent:#ff6b6b;--muted:#666}
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,'Helvetica Neue',Arial;margin:0;background:#f7f7f8;color:#222}
+    header{background:linear-gradient(90deg,#fff 0,#fff0);padding:18px 24px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 1px 0 rgba(0,0,0,0.05)}
+    header h1{margin:0;font-size:18px}
+    .container{display:grid;grid-template-columns:1fr 360px;gap:18px;padding:18px}
+    .card{background:#fff;border-radius:10px;padding:14px;box-shadow:0 6px 18px rgba(12,12,12,0.04)}
+    .restaurants{display:grid;gap:10px}
+    .restaurant{padding:12px;border:1px solid #eee;border-radius:8px}
+    .menu{margin-top:8px}
+    .menu-item{display:flex;justify-content:space-between;padding:8px 6px;border-top:1px dashed #eee}
+    .menu-item:first-child{border-top:0}
+    button{background:var(--accent);border:0;color:white;padding:6px 10px;border-radius:6px;cursor:pointer}
+    button.secondary{background:#eee;color:#222}
+    .cart{position:sticky;top:18px}
+    .cart-item{display:flex;justify-content:space-between;padding:6px 0}
+    .muted{color:var(--muted);font-size:13px}
+    .row{display:flex;gap:8px;align-items:center}
+    .search{padding:8px;border-radius:8px;border:1px solid #ddd;width:280px}
+    .login{display:flex;gap:8px;align-items:center}
+    .small{font-size:13px}
+    footer{padding:12px;text-align:center;color:#666;font-size:13px}
+    @media(max-width:880px){.container{grid-template-columns:1fr} .cart{position:relative}}
+  </style>
+</head>
+<body>
+  <header>
+    <div style="display:flex;align-items:center;gap:12px">
+      <h1>🍔 Food Delivery — Demo</h1>
+      <div class="muted small">Single-file HTML + JS (no build)</div>
+    </div>
+    <div class="row">
+      <input id="search" class="search" placeholder="Search restaurants or dishes" />
+      <div class="login card" style="padding:8px">
+        <span id="who" class="muted small">Not signed in</span>
+        <button id="btnSign" class="secondary">Sign in</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <section>
+      <div class="card">
+        <h2>Restaurants</h2>
+        <div id="restaurants" class="restaurants" aria-live="polite"></div>
+      </div>
+
+      <div class="card" style="margin-top:12px">
+        <h3>How to use</h3>
+        <ol class="muted small">
+          <li>Open this file in a browser.</li>
+          <li>By default it uses local demo data. If you have a backend, it will try <code>/api/restaurants</code>.</li>
+          <li>Click <em>Add</em> on menu items, then <em>Place order</em> in the Cart box.</li>
+        </ol>
+      </div>
+    </section>
+
+    <aside class="card cart">
+      <h3>Cart</h3>
+      <div id="cartItems" style="min-height:120px"></div>
+      <div style="margin-top:10px" class="row">
+        <div style="flex:1">
+          <div class="muted small">Total</div>
+          <div id="total">₹0</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <button id="placeOrder">Place Order</button>
+          <button id="clearCart" class="secondary">Clear</button>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <footer class="card">This is a demo static UI — not a production app. You can wire it to a backend or ask me to convert to React/Vite.</footer>
+
+  <!-- Modal for login (simple) -->
+  <div id="modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);align-items:center;justify-content:center">
+    <div style="background:#fff;padding:18px;border-radius:10px;width:320px">
+      <h3 id="modalTitle">Sign in</h3>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <input id="mName" placeholder="Name (demo)" />
+        <input id="mEmail" placeholder="Email" />
+        <div style="display:flex;justify-content:flex-end;gap:8px">
+          <button id="modalCancel" class="secondary">Cancel</button>
+          <button id="modalSave">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /* ---------- Demo seed data ---------- */
+    const DEMO = [
+      { _id:'r1', name:'Spice Villa', description:'North Indian & Chinese', menu:[{_id:'m1',name:'Butter Chicken',price:280,description:'Creamy tomato gravy'},{_id:'m2',name:'Paneer Tikka',price:200,description:'Charred cottage cheese'}]},
+      { _id:'r2', name:'Samosa Point', description:'Snacks & Chai', menu:[{_id:'m3',name:'Aloo Samosa',price:40,description:'Crispy & hot'},{_id:'m4',name:'Masala Chai',price:25,description:'Strong tea'}]},
+      { _id:'r3', name:'Green Bowl', description:'Healthy bowls & salads', menu:[{_id:'m5',name:'Quinoa Bowl',price:320,description:'Quinoa, veggies, dressing'},{_id:'m6',name:'Falafel Wrap',price:190,description:'With tahini'}]}
+    ];
+
+    /* ---------- State ---------- */
+    let restaurants = [];
+    let cart = [];
+    let user = null;
+
+    /* ---------- Elements ---------- */
+    const el = id => document.getElementById(id);
+    const restaurantsEl = el('restaurants');
+    const cartItemsEl = el('cartItems');
+    const totalEl = el('total');
+    const whoEl = el('who');
+    const btnSign = el('btnSign');
+    const modal = el('modal');
+    const mName = el('mName');
+    const mEmail = el('mEmail');
+    const modalSave = el('modalSave');
+    const modalCancel = el('modalCancel');
+    const search = el('search');
+
+    /* ---------- Utilities ---------- */
+    function money(n){ return '₹' + Number(n).toFixed(0); }
+
+    /* ---------- Load restaurants from backend if available, else demo ---------- */
+    async function loadRestaurants(){
+      try{
+        const res = await fetch('/api/restaurants');
+        if (!res.ok) throw new Error('no remote');
+        restaurants = await res.json();
+        renderRestaurants();
+      }catch(err){
+        // fallback
+        restaurants = DEMO;
+        renderRestaurants();
+      }
+    }
+
+    /* ---------- Render ---------- */
+    function renderRestaurants(){
+      const q = search.value.trim().toLowerCase();
+      restaurantsEl.innerHTML = '';
+      const filtered = restaurants.filter(r => r.name.toLowerCase().includes(q) || r.description?.toLowerCase().includes(q) || r.menu.some(m=>m.name.toLowerCase().includes(q)));
+      if (filtered.length===0){ restaurantsEl.innerHTML = '<div class="muted">No restaurants found.</div>'; return }
+      filtered.forEach(r => {
+        const wrap = document.createElement('div'); wrap.className='restaurant';
+        const h = document.createElement('div'); h.innerHTML = `<strong>${escapeHtml(r.name)}</strong> <div class="muted small">${escapeHtml(r.description||'')}</div>`;
+        wrap.appendChild(h);
+        const menu = document.createElement('div'); menu.className='menu';
+        (r.menu||[]).forEach(it=>{
+          const mi = document.createElement('div'); mi.className='menu-item';
+          const left = document.createElement('div'); left.innerHTML = `<div><b>${escapeHtml(it.name)}</b> <div class="muted small">${escapeHtml(it.description||'')}</div></div>`;
+          const right = document.createElement('div'); right.innerHTML = `<div class="row"><div class="muted">${money(it.price)}</div><button>Add</button></div>`;
+          right.querySelector('button').addEventListener('click', ()=> addToCart({...it, restaurantId: r._id, restaurantName: r.name}));
+          mi.appendChild(left); mi.appendChild(right);
+          menu.appendChild(mi);
+        });
+        wrap.appendChild(menu);
+        restaurantsEl.appendChild(wrap);
+      });
+    }
+
+    function renderCart(){
+      cartItemsEl.innerHTML='';
+      if (cart.length===0) cartItemsEl.innerHTML = '<div class="muted">Your cart is empty.</div>';
+      cart.forEach((it, idx)=>{
+        const d = document.createElement('div'); d.className='cart-item';
+        d.innerHTML = `<div>${escapeHtml(it.name)} <div class="muted small">${escapeHtml(it.restaurantName)}</div></div><div class="row"><div class="muted">${money(it.price)}</div><button class="secondary">-</button></div>`;
+        d.querySelector('button.secondary').addEventListener('click', ()=>{ cart.splice(idx,1); renderCart(); });
+        cartItemsEl.appendChild(d);
+      });
+      const tot = cart.reduce((s,i)=>s+i.price,0);
+      totalEl.textContent = money(tot);
+    }
+
+    /* ---------- Actions ---------- */
+    function addToCart(item){
+      // simple: allow mixed restaurants but warn
+      if (cart.length>0 && cart.some(c=>c.restaurantId!==item.restaurantId)){
+        if (!confirm('Your cart contains items from another restaurant. Clear cart and add this item?')) return;
+        cart = [];
+      }
+      cart.push(item);
+      renderCart();
+    }
+
+    async function placeOrder(){
+      if (cart.length===0) return alert('Cart empty');
+      if (!user) return openModal();
+      const restaurantId = cart[0].restaurantId || null;
+      const items = cart.map(it => ({ itemId: it._id, name: it.name, price: it.price, qty:1 }));
+      const payload = { restaurantId, items };
+      try{
+        const token = localStorage.getItem('token');
+        const res = await fetch('/api/orders', { method:'POST', headers: { 'Content-Type':'application/json', ...(token?{ 'Authorization':'Bearer '+token }:{}) }, body: JSON.stringify(payload) });
+        if (!res.ok) throw new Error('Order failed');
+        const data = await res.json();
+        alert('Order placed: ' + (data._id||'(demo)'));
+        cart = []; renderCart();
+      }catch(err){
+        // demo success fallback
+        alert('Demo: Order created locally. (No backend)');
+        cart = []; renderCart();
+      }
+    }
+
+    /* ---------- Modal & auth (very basic demo) ---------- */
+    function openModal(){
+      modal.style.display='flex';
+      mName.value = user?.name||''; mEmail.value = user?.email||'';
+    }
+    function closeModal(){ modal.style.display='none'; }
+
+    modalSave.addEventListener('click', ()=>{
+      const name = mName.value.trim() || 'Guest';
+      const email = mEmail.value.trim() || 'guest@example.com';
+      user = { name, email };
+      localStorage.setItem('user', JSON.stringify(user));
+      whoEl.textContent = name;
+      btnSign.textContent = 'Logout';
+      closeModal();
+    });
+    modalCancel.addEventListener('click', ()=>{ closeModal(); });
+
+    btnSign.addEventListener('click', ()=>{
+      if (localStorage.getItem('user')){ localStorage.removeItem('user'); localStorage.removeItem('token'); user=null; whoEl.textContent='Not signed in'; btnSign.textContent='Sign in'; }
+      else openModal();
+    });
+
+    /* ---------- Helpers ---------- */
+    function escapeHtml(s){ return String(s).replace(/[&<>\"']/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' })[c]); }
+
+    /* ---------- Wire UI ---------- */
+    el('placeOrder').addEventListener('click', placeOrder);
+    el('clearCart').addEventListener('click', ()=>{ cart=[]; renderCart(); });
+    search.addEventListener('input', renderRestaurants);
+
+    // load user
+    (function init(){
+      const u = localStorage.getItem('user'); if (u){ user = JSON.parse(u); whoEl.textContent = user.name; btnSign.textContent = 'Logout'; }
+      loadRestaurants(); renderCart();
+    })();
+
+    // allow pressing ESC to close modal
+    document.addEventListener('keydown', e=>{ if (e.key==='Escape') closeModal(); });
+  </script>
+</body>
+</html>
